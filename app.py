@@ -105,7 +105,7 @@ st.markdown("""
 # --- INICIALIZACIÓN ---
 if "engine" not in st.session_state:
     if not GEMINI_API_KEY or "TU_API_KEY" in GEMINI_API_KEY:
-        st.error("No se encontró una API Key válida. Por favor, revisa tu archivo .env")
+        st.error("❌ No se detectó una API Key válida. Si estás en local, revisa tu archivo .env. Si estás en la nube, configura los 'Secrets' en Streamlit Cloud.")
         st.stop()
     st.session_state.engine = ChatbotEngine(api_key=GEMINI_API_KEY)
 
