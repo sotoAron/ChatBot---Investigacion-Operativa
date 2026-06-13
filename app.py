@@ -4,21 +4,100 @@ from config import GEMINI_API_KEY, MODEL_NAME
 from chatbot_engine import ChatbotEngine
 
 # Configuración de la interfaz
-st.set_page_config(page_title="Tutor Académico - Gemini 2.5", layout="wide", page_icon="📚")
+st.set_page_config(
+    page_title="Chatbot de PNL", 
+    layout="wide", 
+    page_icon=":material/school:"
+)
 
 # --- ESTILO PERSONALIZADO ---
 st.markdown("""
     <style>
-    .stChatFloatingInputContainer { background-color: rgba(0,0,0,0) !important; }
-    .sidebar-content { padding: 10px; }
-    .new-chat-btn { width: 100%; margin-bottom: 20px; }
+    /* Estilo general y fuentes */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
+    }
+    
+    /* Contenedor de entrada de chat */
+    .stChatFloatingInputContainer { 
+        background-color: transparent !important; 
+        padding-bottom: 20px;
+    }
+    
+    /* Botones de inicio (Starters) */
+    .starter-card {
+        border: 1px solid #e0e0e0;
+        border-radius: 10px;
+        padding: 15px;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        background-color: white;
+        height: 100px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+    }
+    .starter-card:hover {
+        border-color: #4A90E2;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        transform: translateY(-2px);
+    }
+    
+    /* Sidebar styling - Professional Dark Look */
+    section[data-testid="stSidebar"] {
+        background-color: #111827 !important;
+        border-right: 1px solid #1f2937;
+    }
+    section[data-testid="stSidebar"] .stMarkdown, 
+    section[data-testid="stSidebar"] p, 
+    section[data-testid="stSidebar"] h3, 
+    section[data-testid="stSidebar"] h5 {
+        color: #f3f4f6 !important;
+    }
+    
+    /* Sidebar Buttons */
+    section[data-testid="stSidebar"] .stButton button {
+        background-color: transparent !important;
+        color: #d1d5db !important;
+        border: 1px solid #374151 !important;
+        text-align: left !important;
+        justify-content: flex-start !important;
+    }
+    section[data-testid="stSidebar"] .stButton button:hover {
+        background-color: #1f2937 !important;
+        color: white !important;
+        border-color: #4b5563 !important;
+    }
+    
+    /* Primary button in sidebar (Nueva Conversación) */
+    section[data-testid="stSidebar"] div[data-testid="stButton"]:first-child button {
+        background-color: #3b82f6 !important;
+        color: white !important;
+        border: none !important;
+    }
+    section[data-testid="stSidebar"] div[data-testid="stButton"]:first-child button:hover {
+        background-color: #2563eb !important;
+    }
+    
+    /* Ajustes de títulos */
+    .main-title {
+        font-weight: 600;
+        color: #1e293b;
+        margin-bottom: 0px;
+    }
+    .sub-title {
+        color: #64748b;
+        margin-bottom: 30px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
 # --- INICIALIZACIÓN ---
 if "engine" not in st.session_state:
     if not GEMINI_API_KEY or "TU_API_KEY" in GEMINI_API_KEY:
-        st.error("❌ No se encontró una API Key válida en el archivo .env")
+        st.error("No se encontró una API Key válida. Por favor, revisa tu archivo .env")
         st.stop()
     st.session_state.engine = ChatbotEngine(api_key=GEMINI_API_KEY)
 
@@ -27,49 +106,98 @@ engine = st.session_state.engine
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# --- BARRA LATERAL (NAVEGACIÓN) ---
+# --- BARRA LATERAL ---
 with st.sidebar:
-    st.title("📚 Tutor IO")
-    st.subheader(f"Modelo: {MODEL_NAME}")
+    st.markdown("### CONVERSACIONES")
     
-    if st.button("➕ Nueva Conversación", type="primary", use_container_width=True):
+    if st.button("Nueva Conversación", icon=":material/add:", type="primary", use_container_width=True):
         st.session_state.messages = []
         engine.start_new_chat()
         st.rerun()
 
     st.divider()
-    st.subheader("🕒 Historial de Chats")
+    st.markdown("##### :material/history: Historial")
     
     sessions = engine.list_sessions()
+    if not sessions:
+        st.caption("No hay chats previos")
+    
     for session in sessions:
-        if st.button(session["title"], key=session["id"], use_container_width=True):
+        if st.button(session["title"], key=session["id"], icon=":material/chat_bubble:", use_container_width=True):
             ui_msgs = engine.load_session(session["id"])
             if ui_msgs:
                 st.session_state.messages = ui_msgs
                 st.rerun()
 
 # --- ÁREA PRINCIPAL ---
-st.title("👨‍🏫 Asistente de Investigación Operativa")
 
-# Mostrar mensajes
+# Header
+st.markdown('<h1 class="main-title">Asistente de Investigación Operativa</h1>', unsafe_allow_html=True)
+st.markdown('<p class="sub-title">Consulta la teoría y resuelve problemas de Programacion No Lineal</p>', unsafe_allow_html=True)
+
+# Mostrar mensajes existentes
 for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
+    with st.chat_message(msg["role"], avatar=":material/person:" if msg["role"] == "user" else ":material/smart_toy:"):
         st.markdown(msg["content"])
 
-# Entrada de usuario
-if prompt := st.chat_input("Haz tu consulta sobre la materia..."):
-    # Si es el primer mensaje de una sesión vacía, iniciamos motor si no existe ID
+# --- LÓGICA DE STARTER BUTTONS ---
+# Solo se muestran si no hay mensajes
+placeholder_input = "Haz tu consulta sobre la materia..."
+selected_starter = None
+
+if not st.session_state.messages:
+    st.markdown("#### ¿Cómo puedo ayudarte hoy?")
+    cols = st.columns(2)
+    
+    starters = [
+        {
+            "icon": ":material/account_tree:", 
+            "text": "Clasificar mi problema de PNL", 
+            "prompt": "Hola, necesito ayuda para identificar qué método de Programación No Lineal restringida debo usar. ¿Podemos empezar con las preguntas de clasificación?"
+        },
+        {
+            "icon": ":material/query_stats:", 
+            "text": "Parámetros con incertidumbre", 
+            "prompt": "Tengo un problema donde algunos coeficientes son aleatorios (distribución normal). ¿Cómo lo planteo mediante Programación Estocástica?"
+        },
+        {
+            "icon": ":material/functions:", 
+            "text": "Programación Cuadrática", 
+            "prompt": "Mi función objetivo es cuadrática y las restricciones son lineales. ¿Cómo aplico las condiciones KKT y el método de las dos fases?"
+        },
+        {
+            "icon": ":material/rebase_edit:", 
+            "text": "Combinaciones Lineales", 
+            "prompt": "¿Cómo funciona el procedimiento iterativo del método de Combinaciones Lineales (Zoutendijk) para restricciones lineales?"
+        }
+    ]
+    
+    for i, starter in enumerate(starters):
+        with cols[i % 2]:
+            if st.button(f"{starter['icon']} {starter['text']}", use_container_width=True, key=f"starter_{i}"):
+                selected_starter = starter['prompt']
+
+# Entrada de usuario (Input)
+prompt = st.chat_input(placeholder_input)
+
+# Si se seleccionó un starter, lo tratamos como un prompt
+if selected_starter:
+    prompt = selected_starter
+
+# --- PROCESAMIENTO DEL MENSAJE ---
+if prompt:
+    # Si es el primer mensaje, iniciamos motor
     if not engine.current_session_id:
         engine.start_new_chat()
 
     # Agregar mensaje de usuario
     st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
+    with st.chat_message("user", avatar=":material/person:"):
         st.markdown(prompt)
 
     # Generar respuesta
-    with st.chat_message("assistant"):
-        with st.spinner("Consultando material..."):
+    with st.chat_message("assistant", avatar=":material/smart_toy:"):
+        with st.spinner("Analizando..."):
             try:
                 response = engine.send_message(prompt)
                 st.markdown(response.text)
@@ -77,8 +205,13 @@ if prompt := st.chat_input("Haz tu consulta sobre la materia..."):
                 
                 # GUARDADO AUTOMÁTICO
                 engine.save_session(st.session_state.messages)
+                
+                # Forzar refresh si fue un starter para que desaparezcan los botones
+                if selected_starter:
+                    st.rerun()
+                    
             except Exception as e:
                 if "429" in str(e):
-                    st.error("⚠️ Límite de cuota alcanzado. Espera un momento.")
+                    st.error("Límite de cuota alcanzado. Espera un momento antes de volver a intentar.")
                 else:
-                    st.error(f"Error: {e}")
+                    st.error(f"Se produjo un error: {e}")
