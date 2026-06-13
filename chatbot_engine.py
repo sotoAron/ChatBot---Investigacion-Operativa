@@ -11,35 +11,39 @@ class ChatbotEngine:
         self.api_key = api_key
         if api_key:
             genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel(MODEL_NAME)
+        
+        # Cargar contexto de Markdown si existe
+        self.context_content = self._get_context_content()
+        
+        # Combinar el prompt del sistema con el contenido del material
+        # Esto usa system_instruction, que es más eficiente en tokens
+        full_instruction = SYSTEM_PROMPT
+        if self.context_content:
+            full_instruction += f"\n\n--- MATERIAL DE REFERENCIA ---\n{self.context_content}"
+            
+        self.model = genai.GenerativeModel(
+            model_name=MODEL_NAME,
+            system_instruction=full_instruction
+        )
         self.chat = None
         self.current_session_id = None
-        self.gemini_file = None
 
-    def _get_context_file(self):
-        """Busca el primer PDF en la carpeta context."""
+    def _get_context_content(self):
+        """Busca y lee el contenido del archivo de contexto (Markdown)."""
         if not os.path.exists(CONTEXT_DIR):
             return None
-        files = [f for f in os.listdir(CONTEXT_DIR) if f.endswith(".pdf")]
-        return os.path.join(CONTEXT_DIR, files[0]) if files else None
+        # Priorizar archivos .md como solicitó el usuario
+        files = [f for f in os.listdir(CONTEXT_DIR) if f.endswith(".md")]
+        if files:
+            with open(os.path.join(CONTEXT_DIR, files[0]), "r", encoding="utf-8") as f:
+                return f.read()
+        return None
 
     def start_new_chat(self, session_id=None):
-        """Inicia un nuevo chat. Si no hay session_id, genera uno nuevo."""
+        """Inicia un nuevo chat. El contexto ya está en system_instruction."""
         self.current_session_id = session_id or str(uuid.uuid4())[:8]
+        # Ya no necesitamos subir archivos ni enviar mensajes iniciales costosos
         self.chat = self.model.start_chat(history=[])
-        
-        # Cargar contexto automáticamente si existe
-        pdf_path = self._get_context_file()
-        if pdf_path:
-            file_name = os.path.basename(pdf_path)
-            self.gemini_file = genai.upload_file(path=pdf_path, mime_type="application/pdf", display_name=file_name)
-            while self.gemini_file.state.name == "PROCESSING":
-                time.sleep(1)
-                self.gemini_file = genai.get_file(self.gemini_file.name)
-            
-            # Inicializar con el PDF y el prompt del sistema
-            self.chat.send_message([self.gemini_file, SYSTEM_PROMPT])
-        
         return self.current_session_id
 
     def send_message(self, message):
@@ -91,14 +95,16 @@ class ChatbotEngine:
         sessions = []
         for f in files:
             path = os.path.join(SESSIONS_DIR, f)
-            with open(path, "r", encoding="utf-8") as s:
-                data = json.load(s)
-                # Usar el primer mensaje del usuario como título si existe
-                title = "Nueva Conversación"
-                for msg in data["ui_messages"]:
-                    if msg["role"] == "user":
-                        title = msg["content"][:30] + "..."
-                        break
-                sessions.append({"id": data["session_id"], "title": title, "time": data["timestamp"]})
+            try:
+                with open(path, "r", encoding="utf-8") as s:
+                    data = json.load(s)
+                    title = "Nueva Conversación"
+                    for msg in data["ui_messages"]:
+                        if msg["role"] == "user":
+                            title = msg["content"][:30] + "..."
+                            break
+                    sessions.append({"id": data["session_id"], "title": title, "time": data["timestamp"]})
+            except Exception:
+                continue
         
         return sorted(sessions, key=lambda x: x["time"], reverse=True)
