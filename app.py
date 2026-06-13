@@ -45,40 +45,48 @@ st.markdown("""
         transform: translateY(-2px);
     }
     
-    /* Sidebar styling - Professional Dark Look */
+    /* Sidebar styling - Customized Colors */
     section[data-testid="stSidebar"] {
-        background-color: #111827 !important;
-        border-right: 1px solid #1f2937;
-    }
-    section[data-testid="stSidebar"] .stMarkdown, 
-    section[data-testid="stSidebar"] p, 
-    section[data-testid="stSidebar"] h3, 
-    section[data-testid="stSidebar"] h5 {
-        color: #f3f4f6 !important;
+        background-color: #F0F2F6 !important; /* Volvemos al color claro solicitado */
+        border-right: 1px solid #e0e0e0;
     }
     
-    /* Sidebar Buttons */
-    section[data-testid="stSidebar"] .stButton button {
-        background-color: transparent !important;
-        color: #d1d5db !important;
-        border: 1px solid #374151 !important;
-        text-align: left !important;
-        justify-content: flex-start !important;
-    }
-    section[data-testid="stSidebar"] .stButton button:hover {
-        background-color: #1f2937 !important;
-        color: white !important;
-        border-color: #4b5563 !important;
-    }
-    
-    /* Primary button in sidebar (Nueva Conversación) */
-    section[data-testid="stSidebar"] div[data-testid="stButton"]:first-child button {
-        background-color: #3b82f6 !important;
+    /* Primary button (Nueva Conversación) - Target by data-testid */
+    section[data-testid="stSidebar"] button[data-testid="stBaseButton-primary"] {
+        background-color: #FF4B4B !important;
         color: white !important;
         border: none !important;
+        width: 100%;
     }
-    section[data-testid="stSidebar"] div[data-testid="stButton"]:first-child button:hover {
-        background-color: #2563eb !important;
+    section[data-testid="stSidebar"] button[data-testid="stBaseButton-primary"]:hover {
+        background-color: #D32F2F !important;
+    }
+
+    /* Secondary buttons (History) - Target by data-testid */
+    section[data-testid="stSidebar"] button[data-testid="stBaseButton-secondary"] {
+        background-color: white !important;
+        color: #31333F !important;
+        border: 1px solid #4A90E2 !important;
+        text-align: left !important;
+        justify-content: flex-start !important;
+        width: 100%;
+    }
+    section[data-testid="stSidebar"] button[data-testid="stBaseButton-secondary"]:hover {
+        background-color: #f0f7ff !important;
+        border-color: #1E88E5 !important;
+    }
+
+    /* Text contrast in sidebar (Dark text on light background) */
+    section[data-testid="stSidebar"] .stMarkdown h3,
+    section[data-testid="stSidebar"] .stMarkdown h5 {
+        color: #1e293b !important;
+        font-weight: 600 !important;
+    }
+    section[data-testid="stSidebar"] .stCaption {
+        color: #475569 !important;
+    }
+    section[data-testid="stSidebar"] p {
+        color: #31333F !important;
     }
     
     /* Ajustes de títulos */
