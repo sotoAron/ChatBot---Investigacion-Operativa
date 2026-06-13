@@ -6,6 +6,13 @@ load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# Puedes agregar más configuraciones aquí si es necesario
-DEFAULT_MODEL = "gemini-2.0-flash"
-ALLOWED_EXTENSIONS = {"pdf"}
+# Configuración intrínseca
+MODEL_NAME = "gemini-2.5-flash-lite"
+
+# Rutas del sistema
+CONTEXT_DIR = "context"
+SESSIONS_DIR = "sessions"
+
+# Asegurar que los directorios existan
+os.makedirs(CONTEXT_DIR, exist_ok=True)
+os.makedirs(SESSIONS_DIR, exist_ok=True)
