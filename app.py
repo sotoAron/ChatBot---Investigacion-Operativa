@@ -17,87 +17,170 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
     html, body, [class*="css"] {
         font-family: 'Inter', sans-serif;
+        background-color: #0e0e0e !important;
+        color: #e0e0e0;
     }
     
-    /* Contenedor de entrada de chat */
+    /* Contenedor flotante de la entrada de chat (área donde escribes) */
     .stChatFloatingInputContainer { 
         background-color: transparent !important; 
         padding-bottom: 20px;
     }
     
-    /* Botones de inicio (Starters) */
+    /* Tarjetas de inicio (Starter Cards) que aparecen al principio */
     .starter-card {
-        border: 1px solid #e0e0e0;
+        border: 1px solid #333333;
         border-radius: 10px;
         padding: 15px;
         transition: all 0.3s ease;
         cursor: pointer;
-        background-color: white;
+        background-color: #1a1a1a;
+        color: #d0d0d0;
         height: 100px;
         display: flex;
         align-items: center;
         justify-content: center;
         text-align: center;
     }
+    /* Efecto hover para las tarjetas de inicio */
     .starter-card:hover {
-        border-color: #4A90E2;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        border-color: #666666;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.5);
         transform: translateY(-2px);
+        background-color: #262626;
     }
     
-    /* Sidebar styling - Customized Colors */
+    /* Contenedor principal de la barra lateral (Sidebar) */
     section[data-testid="stSidebar"] {
-        background-color: #F0F2F6 !important; /* Volvemos al color claro solicitado */
-        border-right: 1px solid #e0e0e0;
+        background-color: #1E2128 !important; 
+        border-right: 1px solid #1E2128;
     }
     
-    /* Primary button (Nueva Conversación) - Target by data-testid */
+    /* Botón principal 'Nueva Conversación' en la barra lateral */
     section[data-testid="stSidebar"] button[data-testid="stBaseButton-primary"] {
-        background-color: #FF4B4B !important;
-        color: white !important;
-        border: none !important;
+        background-color: #2e7d32 !important;
+        color: #b0b0b0 !important;
+        border: 1px solid #388e3c !important;
         width: 100%;
+        box-shadow: 0 0 10px rgba(46, 125, 50, 0.4) !important;
+        transition: all 0.3s ease !important;
     }
+    /* Efecto hover y retroiluminación para el botón 'Nueva Conversación' */
     section[data-testid="stSidebar"] button[data-testid="stBaseButton-primary"]:hover {
-        background-color: #D32F2F !important;
+        background-color: #388e3c !important;
+        border-color: #4caf50 !important;
+        box-shadow: 0 0 20px rgba(76, 175, 80, 0.6) !important;
+        transform: translateY(-1px);
     }
 
-    /* Secondary buttons (History) - Target by data-testid */
+    /* Botones secundarios (Historial de chats) en la barra lateral */
     section[data-testid="stSidebar"] button[data-testid="stBaseButton-secondary"] {
-        background-color: white !important;
-        color: #31333F !important;
-        border: 1px solid #4A90E2 !important;
+        background-color: #282C34 !important;
+        color: #b0b0b0 !important;
+        border: 1px solid #35373D !important;
         text-align: left !important;
         justify-content: flex-start !important;
         width: 100%;
     }
+    /* Efecto hover para los botones del historial */
     section[data-testid="stSidebar"] button[data-testid="stBaseButton-secondary"]:hover {
-        background-color: #f0f7ff !important;
-        border-color: #1E88E5 !important;
+        background-color: #1A1C23 !important;
+        border-color: #404040 !important;
     }
 
-    /* Text contrast in sidebar (Dark text on light background) */
+    /* Títulos y encabezados dentro de la barra lateral */
     section[data-testid="stSidebar"] .stMarkdown h3,
     section[data-testid="stSidebar"] .stMarkdown h5 {
-        color: #1e293b !important;
+        color: #ffffff !important;
         font-weight: 600 !important;
     }
+    /* Texto pequeño (Caption) en la barra lateral */
     section[data-testid="stSidebar"] .stCaption {
-        color: #475569 !important;
+        color: #666666 !important;
     }
+    /* Párrafos de texto generales en la barra lateral */
     section[data-testid="stSidebar"] p {
-        color: #31333F !important;
+        color: #b0b0b0 !important;
     }
     
-    /* Ajustes de títulos */
+    /* Título principal de la aplicación en el área central */
     .main-title {
         font-weight: 600;
-        color: #1e293b;
+        color: #ffffff;
         margin-bottom: 0px;
     }
+    /* Subtítulo o descripción debajo del título principal */
     .sub-title {
-        color: #64748b;
+        color: #808080;
         margin-bottom: 30px;
+    }
+
+    /* Fondo general de toda la aplicación (Main App Container) */
+    .stApp {
+        background-color: #0F1117 !important;
+    }
+
+    /* Burbujas de mensajes en el chat (tanto usuario como asistente) */
+    [data-testid="stChatMessage"] {
+        background-color: #1A1C23 !important;
+        border: 1px solid #262626 !important;
+        border-radius: 10px !important;
+        margin-bottom: 10px !important;
+    }
+    
+    /* Color del texto dentro de las burbujas de mensaje */
+    [data-testid="stChatMessage"] p {
+        color: #e0e0e0 !important;
+    }
+
+    /* Contenedor de la caja de texto (Input) donde escribe el usuario */
+    [data-testid="stChatInput"] {
+        background-color: #161616 !important;
+        border: 1px solid #333333 !important;
+        border-radius: 10px !important;
+    }
+
+    /* ELIMINACIÓN DE BORDES Y SOMBRAS ROJAS INTERNAS */
+    [data-testid="stChatInput"] *, 
+    [data-testid="stChatInput"] div, 
+    [data-testid="stChatInput"] textarea {
+        box-shadow: none !important;
+        outline: none !important;
+        border-color: transparent !important;
+    }
+
+    /* Aplicar ÚNICAMENTE el borde verde al contenedor principal en foco */
+    [data-testid="stChatInput"]:focus-within {
+        border: 1px solid #4CB16F !important;
+    }
+    
+    /* Texto que escribe el usuario en la caja de entrada */
+    [data-testid="stChatInput"] textarea {
+        color: #ffffff !important;
+    }
+    
+    /* Botón de enviar (flecha) dentro de la caja de entrada */
+    [data-testid="stChatInput"] button {
+        color: #ffffff !important;
+    }
+
+    /* Botón de enviar activo (cuando hay texto) */
+    [data-testid="stChatInput"] button:enabled {
+        background-color: #4CB16F !important;
+        color: #ffffff !important;
+    }
+            
+    /* Efecto hover y retroiluminación para el Botón de enviar activo (cuando hay texto) */
+    [data-testid="stChatInput"] button:enabled:hover {
+        background-color: #388e3c !important;
+        border-color: #4caf50 !important;
+        box-shadow: 0 0 10px rgba(76, 175, 80, 0.6) !important;
+        transform: translateY(-1px);
+    }
+
+    /* Estilo de los enlaces (Links) en toda la aplicación */
+    a {
+        color: #aaaaaa !important;
     }
     </style>
 """, unsafe_allow_html=True)
