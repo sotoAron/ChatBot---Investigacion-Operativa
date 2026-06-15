@@ -1,7 +1,12 @@
 import streamlit as st
 import os
 import uuid
+import importlib
+import chatbot_engine
 from config import GEMINI_API_KEY, MODEL_NAME
+
+# Forzar la recarga del motor para evitar versiones cacheadas
+importlib.reload(chatbot_engine)
 from chatbot_engine import ChatbotEngine
 
 # Configuración de la interfaz
@@ -229,8 +234,15 @@ with st.sidebar:
     st.divider()
     st.markdown("##### :material/history: Historial")
     
-    # Solo listamos sesiones que pertenezcan a este usuario
-    sessions = engine.list_sessions(st.session_state.user_id)
+    # Usamos el nuevo nombre del método para forzar la recarga del módulo
+    try:
+        sessions = engine.get_user_sessions(st.session_state.user_id)
+    except (TypeError, AttributeError):
+        # Si el método no existe o la firma es vieja, reiniciamos el motor
+        st.session_state.engine = ChatbotEngine(api_key=GEMINI_API_KEY)
+        engine = st.session_state.engine
+        sessions = engine.get_user_sessions(st.session_state.user_id)
+
     if not sessions:
         st.caption("No hay chats previos")
     
