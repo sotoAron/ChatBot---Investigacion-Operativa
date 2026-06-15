@@ -2,4 +2,4 @@
 __pycache__/
 *.json
 temp_*
-secrerts.toml
+.streamlit\secrets.toml
