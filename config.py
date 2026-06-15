@@ -2,6 +2,9 @@ import os
 import streamlit as st
 from dotenv import load_dotenv
 
+# Cargar variables de entorno desde .env
+load_dotenv()
+
 # Intentar cargar desde Streamlit Secrets (ideal para Cloud)
 # Si no existe, intentar desde variables de entorno / .env (ideal para local)
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")

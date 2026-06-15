@@ -1,6 +1,12 @@
 import streamlit as st
 import os
+import uuid
+import importlib
+import chatbot_engine
 from config import GEMINI_API_KEY, MODEL_NAME
+
+# Forzar la recarga del motor para evitar versiones cacheadas
+importlib.reload(chatbot_engine)
 from chatbot_engine import ChatbotEngine
 
 # Configuración de la interfaz
@@ -81,6 +87,19 @@ st.markdown("""
         text-align: left !important;
         justify-content: flex-start !important;
         width: 100%;
+        display: block !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+    /* Asegurar que el contenido interno (texto) también respete la alineación y el corte */
+    section[data-testid="stSidebar"] button[data-testid="stBaseButton-secondary"] div {
+        text-align: left !important;
+        display: inline-block !important;
+        max-width: 100% !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
     }
     /* Efecto hover para los botones del historial */
     section[data-testid="stSidebar"] button[data-testid="stBaseButton-secondary"]:hover {
@@ -186,6 +205,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- INICIALIZACIÓN ---
+if "user_id" not in st.session_state:
+    # Generamos un ID único para este visitante en esta pestaña
+    from streamlit.runtime.scriptrunner import get_script_run_ctx
+    ctx = get_script_run_ctx()
+    st.session_state.user_id = ctx.session_id if ctx else str(uuid.uuid4())[:8]
+
 if "engine" not in st.session_state:
     if not GEMINI_API_KEY or "TU_API_KEY" in GEMINI_API_KEY:
         st.error("❌ No se detectó una API Key válida. Si estás en local, revisa tu archivo .env. Si estás en la nube, configura los 'Secrets' en Streamlit Cloud.")
@@ -209,7 +234,15 @@ with st.sidebar:
     st.divider()
     st.markdown("##### :material/history: Historial")
     
-    sessions = engine.list_sessions()
+    # Usamos el nuevo nombre del método para forzar la recarga del módulo
+    try:
+        sessions = engine.get_user_sessions(st.session_state.user_id)
+    except (TypeError, AttributeError):
+        # Si el método no existe o la firma es vieja, reiniciamos el motor
+        st.session_state.engine = ChatbotEngine(api_key=GEMINI_API_KEY)
+        engine = st.session_state.engine
+        sessions = engine.get_user_sessions(st.session_state.user_id)
+
     if not sessions:
         st.caption("No hay chats previos")
     
@@ -244,7 +277,7 @@ if not st.session_state.messages:
         {
             "icon": ":material/account_tree:", 
             "text": "Clasificar mi problema de PNL", 
-            "prompt": "Hola, necesito ayuda para identificar qué método de Programación No Lineal restringida debo usar. ¿Podemos empezar con las preguntas de clasificación?"
+            "prompt": "Hola, necesito ayuda para identificar qué método de Programación No Lineal restringida debo usar. ¿Pedemos empezar con las preguntas de clasificación?"
         },
         {
             "icon": ":material/query_stats:", 
@@ -294,8 +327,8 @@ if prompt:
                 st.markdown(response.text)
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
                 
-                # GUARDADO AUTOMÁTICO
-                engine.save_session(st.session_state.messages)
+                # GUARDADO AUTOMÁTICO - Ahora con ID de usuario
+                engine.save_session(st.session_state.messages, st.session_state.user_id)
                 
                 # Forzar refresh si fue un starter para que desaparezcan los botones
                 if selected_starter:
