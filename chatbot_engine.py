@@ -202,7 +202,7 @@ class ChatbotEngine:
 
     def _classify_with_llm(self, message: str) -> bool:
         try:
-            classifier = genai.GenerativeModel(model_name="gemini-2.0-flash-lite")
+            classifier = genai.GenerativeModel(model_name=MODEL_NAME)
             prompt = (
                 "Responde ÚNICAMENTE CALCULAR o TEXTO.\n"
                 "CALCULAR: si pide resolver problemas numéricos.\n"
