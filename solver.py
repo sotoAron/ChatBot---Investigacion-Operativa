@@ -547,6 +547,7 @@ def solve_separable_programming(
     sense: str = "max",
     n_segments: int = 10,
 ) -> Dict[str, Any]:
+    n_segments = int(n_segments) 
     """Resuelve un problema separable  Z = sum_j f_j(x_j)  sujeto a A X <= b, X >= 0.
 
     Parámetros
