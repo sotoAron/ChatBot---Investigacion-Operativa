@@ -10,7 +10,7 @@ load_dotenv()
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
 
 # Configuración intrínseca
-MODEL_NAME = "gemini-2.5-flash"
+MODEL_NAME = "gemini-2.5-flash-lite"
 
 # Rutas del sistema
 CONTEXT_DIR = "context"
