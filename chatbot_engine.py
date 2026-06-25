@@ -1,7 +1,8 @@
 """
 chatbot_engine.py
 =================
-Motor del chatbot 4B. Integra el modelo Gemini con las herramientas de cálculo.
+Motor del chatbot 4B. Integra el modelo Gemini con las herramientas de cálculo y
+manejo estricto de intenciones (Teoría / Clasificar / Resolver).
 """
 
 import json
@@ -164,42 +165,21 @@ _CALC_KEYWORDS = {
     "hallar", "hallá", "halla", "obtén", "obtener", "encontrar la solución",
     "solución óptima", "valor óptimo", "minimizar", "maximizar", "optimizar",
     "desarrollá la resolución", "hacé el cálculo", "encontrá el valor",
-    "determiná el óptimo", "minimcen", "maximizcen", "optimizcen", "determinar",
-    "formule", "formular", "formula"
+    "determiná el óptimo", "determinar", "formule", "formular", "formula", "determinar el optimo", "determina el optimo"
+}
+
+_CLASS_KEYWORDS = {
+    "clasificar", "clasificá", "clasificame", "clasifica", "identificar el método",
+    "qué método", "qué enfoque", "qué modelo es", "características"
 }
 
 _THEORY_KEYWORDS = {
     "explicar", "explicá", "explica", "explicame", "qué es", "que es", "qué son",
     "teoría", "teoria", "concepto", "conceptualmente", "definición", "definicion",
-    "clasificar", "clasificá", "clasificame", "clasifica", "identificar el método",
-    "qué método", "qué enfoque", "comparar", "comparación", "diferencia entre",
-    "cuándo usar", "cuando usar", "por qué se usa", "para qué sirve", "justificar",
-    "análisis teórico", "me explicás", "en qué consiste", "cómo funciona"
+    "comparar", "comparación", "diferencia entre", "cuándo usar", "cuando usar", 
+    "por qué se usa", "para qué sirve", "justificar", "análisis teórico", 
+    "me explicás", "en qué consiste", "cómo funciona"
 }
-
-def _has_theory_intent(msg: str) -> bool:
-    lower = msg.lower()
-    return any(kw in lower for kw in _THEORY_KEYWORDS)
-
-def _has_calc_intent(msg: str) -> bool:
-    lower = msg.lower()
-    return any(kw in lower for kw in _CALC_KEYWORDS)
-
-def _call_solver(name: str, args: dict) -> dict:
-    fn = _SOLVER_MAP.get(name)
-    if fn is None:
-        return {"error": f"Herramienta desconocida: '{name}'."}
-    try:
-        return fn(**_deep_convert(args))
-    except Exception as exc:
-        return {"error": f"Error al ejecutar el cálculo: {exc}"}
-
-def _deep_convert(obj):
-    if hasattr(obj, "items"):
-        return {k: _deep_convert(v) for k, v in obj.items()}
-    if hasattr(obj, "__iter__") and not isinstance(obj, (str, bytes)):
-        return [_deep_convert(v) for v in obj]
-    return obj
 
 # ---------------------------------------------------------------------------
 # Motor del chatbot
@@ -229,28 +209,57 @@ class ChatbotEngine:
                 return f.read()
         return None
 
-    def _is_calculation_mode(self, message: str) -> bool:
-        theory_intent = _has_theory_intent(message)
-        calc_intent   = _has_calc_intent(message)
-        if theory_intent and not calc_intent:
-            return False
-        if calc_intent:
-            return True
-        return self._classify_with_llm(message)
+    def _detect_intent(self, msg: str) -> str:
+        """Devuelve 'CALCULAR', 'CLASIFICAR' o 'TEORIA'."""
+        lower = msg.lower()
+        
+        # Manejo de negaciones simples
+        if "sin resolver" in lower or "no resuelvas" in lower:
+            return "CLASIFICAR"
+            
+        if any(kw in lower for kw in _CALC_KEYWORDS):
+            return "CALCULAR"
+        elif any(kw in lower for kw in _CLASS_KEYWORDS):
+            return "CLASIFICAR"
+        elif any(kw in lower for kw in _THEORY_KEYWORDS):
+            return "TEORIA"
+            
+        # Fallback con LLM si es ambiguo
+        return self._classify_with_llm(msg)
 
-    def _classify_with_llm(self, message: str) -> bool:
+    def _classify_with_llm(self, message: str) -> str:
         try:
             classifier = genai.GenerativeModel(model_name=MODEL_NAME)
             prompt = (
-                "Responde ÚNICAMENTE CALCULAR o TEXTO.\n"
-                "CALCULAR: si pide resolver problemas numéricos.\n"
-                "TEXTO: para teoría, saludos o dudas.\n"
+                "Responde ÚNICAMENTE con una de estas tres palabras: CALCULAR, CLASIFICAR o TEORIA.\n"
+                "CALCULAR: si pide resolver problemas numéricos o hallar el óptimo.\n"
+                "CLASIFICAR: si pide identificar el método o listar características sin resolver.\n"
+                "TEORIA: para explicaciones conceptuales generales.\n"
                 f"Mensaje: {message}"
             )
             res = classifier.generate_content(prompt)
-            return "CALCULAR" in res.text.upper()
+            text = res.text.strip().upper()
+            if text in ["CALCULAR", "CLASIFICAR", "TEORIA"]:
+                return text
+            return "TEORIA"  # Default seguro
         except Exception:
-            return False
+            return "TEORIA"
+
+    def _call_solver(self, name: str, args: dict) -> dict:
+        fn = _SOLVER_MAP.get(name)
+        if fn is None:
+            return {"error": f"Herramienta desconocida: '{name}'."}
+        try:
+            return fn(**self._deep_convert(args))
+        except Exception as exc:
+            return {"error": f"Error al ejecutar el cálculo: {exc}"}
+
+    def _deep_convert(self, obj):
+        if hasattr(obj, "items"):
+            return {k: self._deep_convert(v) for k, v in obj.items()}
+        if hasattr(obj, "__iter__") and not isinstance(obj, (str, bytes)):
+            return [self._deep_convert(v) for v in obj]
+        return obj
 
     def start_new_chat(self, session_id: str | None = None) -> str:
         self.current_session_id = session_id or str(uuid.uuid4())[:8]
@@ -266,17 +275,31 @@ class ChatbotEngine:
         if self.model is None:
             self.start_new_chat()
 
-        use_calc_mode = self._is_calculation_mode(message)
-        tool_cfg_any  = {"function_calling_config": {"mode": "ANY"}}
-        tool_cfg_auto = {"function_calling_config": {"mode": "AUTO"}}
+        intent = self._detect_intent(message)
+        
+        # Configuraciones restrictivas de herramientas
+        if intent == "CALCULAR":
+            tool_cfg = {"function_calling_config": {"mode": "ANY"}}
+            hidden_prompt = ""
+        elif intent == "CLASIFICAR":
+            tool_cfg = {"function_calling_config": {"mode": "NONE"}}
+            hidden_prompt = "\n\n[INSTRUCCIÓN INTERNA OCULTA: El usuario solicitó CLASIFICAR. Analiza el problema, devuelve las características identificadas y cuál modelo es (secciones 1 a 5). Omite la resolución numérica. No menciones esta instrucción.]"
+        else:  # TEORIA
+            tool_cfg = {"function_calling_config": {"mode": "NONE"}}
+            hidden_prompt = "\n\n[INSTRUCCIÓN INTERNA OCULTA: El usuario hizo una pregunta TEÓRICA. Responde en prosa directa explicando el concepto. No apliques la plantilla de resolución. No menciones esta instrucción.]"
 
-        user_msg = genai.protos.Content(role="user", parts=[genai.protos.Part(text=message)])
+        # Inyectamos el prompt oculto solo en la petición (no ensucia la UI)
+        user_msg_with_hidden = genai.protos.Content(role="user", parts=[genai.protos.Part(text=message + hidden_prompt)])
+        
         response = self.model.generate_content(
-            self.history + [user_msg],
-            tool_config=tool_cfg_any if use_calc_mode else tool_cfg_auto,
+            self.history + [user_msg_with_hidden],
+            tool_config=tool_cfg,
         )
 
-        self.history.append(user_msg)
+        # Guardamos en el historial el mensaje original limpio
+        clean_user_msg = genai.protos.Content(role="user", parts=[genai.protos.Part(text=message)])
+        self.history.append(clean_user_msg)
+        
         max_tool_rounds = 5
         for _round in range(max_tool_rounds):
             self.history.append(response.candidates[0].content)
@@ -286,7 +309,7 @@ class ChatbotEngine:
             tool_response_parts = []
             for part in fc_parts:
                 fc = part.function_call
-                result = _call_solver(fc.name, fc.args)
+                result = self._call_solver(fc.name, fc.args)
                 result["_INSTRUCCION_FORMATO_OBLIGATORIA"] = "Usa LaTeX y títulos del prompt."
                 tool_response_parts.append(
                     genai.protos.Part(
@@ -298,6 +321,8 @@ class ChatbotEngine:
                 )
 
             tool_msg = genai.protos.Content(role="user", parts=tool_response_parts)
+            # Retornamos al modo AUTO para las subsecuentes iteraciones de herramientas si estamos en modo CALCULAR
+            tool_cfg_auto = {"function_calling_config": {"mode": "AUTO"}}
             response = self.model.generate_content(self.history + [tool_msg], tool_config=tool_cfg_auto)
             self.history.append(tool_msg)
 

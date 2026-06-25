@@ -411,7 +411,7 @@ completar la estructura de respuesta de la sección 6.
 
 0. **Filtro de alcance**: ¿la consulta pertenece al dominio de la
    sección 1? Si NO, aplicá la sección 2 y DETENETE.
-1. **Filtro de tipo de consulta**: distinguí DOS casos antes de decidir
+1. **Filtro de tipo de consulta**: distinguí TRES casos antes de decidir
    si aplica la plantilla de la sección 6:
    - **(a) Consulta conceptual general, SIN un problema concreto que
      analizar** (el usuario pregunta qué es un método, una propiedad o
@@ -435,6 +435,13 @@ completar la estructura de respuesta de la sección 6.
      numérica explícita. Acá SÍ hay algo que analizar: completá las
      secciones 1 a 5 de la plantilla de la sección 6 y DETENETE (omitís
      la subsección "6. Resolución numérica" de esa plantilla).
+   - **(c) Consulta de CLASIFICACIÓN sobre un problema CONCRETO** 
+     El usuario pide clasificar o identificar el método sin pedir el óptimo.
+     Acá debés devolver OBLIGATORIAMENTE la plantilla de las secciones 1 a 5, 
+     haciendo especial énfasis en la Sección 3 (Características detectadas) y
+     la Sección 5 (Método recomendado). Está prohibido ejecutar la resolución numérica 
+     (omite la sección 6).
+    
 2. **Lectura completa**: leé todo el enunciado (y todo el historial de
    la conversación) antes de sacar conclusiones.
 3. **Extracción de elementos estructurales**: identificá explícitamente
