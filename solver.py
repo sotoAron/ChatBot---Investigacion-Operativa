@@ -1,5 +1,3 @@
-
-
 from __future__ import annotations
 
 import itertools
@@ -1013,4 +1011,242 @@ def stochastic_to_deterministic(
             "de los otros métodos (por ejemplo, si la función objetivo es "
             "cuadrática, con solve_quadratic_programming)."
         ),
+    }
+
+
+# ---------------------------------------------------------------------------
+# 7. Programación Estocástica Lineal de Dos Etapas con Recurso
+#    (escenarios discretos, forma extensiva determinista)
+# ---------------------------------------------------------------------------
+
+def _check_matrix(
+    M: Optional[Sequence[Sequence[float]]], filas: int, cols: int, nombre: str
+) -> Tuple[Optional[np.ndarray], Optional[str]]:
+    """Convierte y valida que M tenga forma (filas, cols). Devuelve (array, error)."""
+    arr = np.array(M, dtype=float) if M is not None else np.zeros((filas, cols))
+    if arr.size == 0 and filas == 0:
+        arr = arr.reshape(0, cols)
+    if arr.shape != (filas, cols):
+        return None, f"{nombre} debe tener forma ({filas}, {cols}); se recibió {arr.shape}."
+    return arr, None
+
+
+def solve_two_stage_stochastic_lp(
+    variables_1ra_etapa: List[str],
+    c_1ra_etapa: List[float],
+    variables_recurso: List[str],
+    escenarios: List[Dict[str, Any]],
+    A_1ra_etapa: Optional[List[List[float]]] = None,
+    b_1ra_etapa: Optional[List[float]] = None,
+    sense: str = "min",
+) -> Dict[str, Any]:
+    """Resuelve Programación Estocástica Lineal de Dos Etapas con Recurso.
+
+    Formulación (forma extensiva determinista, resuelta de una sola vez con
+    ``linprog`` sobre el vector ampliado ``z = [x, y_1, y_2, ..., y_S]``):
+
+        min/max  c^T x + sum_s p_s (q_s^T y_s)
+        s.a.     A x <= b                       (1ra etapa, opcional)
+                 T_s x + W_s y_s <= h_s          (2da etapa, para cada s)
+                 x >= 0, y_s >= 0
+
+    A diferencia de una restricción probabilística simple (ver
+    ``stochastic_to_deterministic``), aquí la incertidumbre se modela con
+    escenarios discretos de probabilidad conocida. ``x`` (1ra etapa) se fija
+    ANTES de observar qué escenario ocurre; cada ``y_s`` (2da etapa, variable
+    de recurso) es la reacción óptima una vez conocido el escenario ``s``.
+    Por eso ``y_s`` no se comparte entre escenarios: en la forma extensiva
+    cada escenario tiene su propio bloque de columnas, lo que evita el error
+    común de tratar las variables de recurso como si fueran únicas para
+    todos los escenarios (eso forzaría una única reacción "promedio" en
+    lugar de una reacción óptima por escenario, violando la esencia del
+    modelo de recurso).
+
+    ADVERTENCIA DE MODELADO (la fuente de error más común al usar esta
+    función): si la incertidumbre es sobre un REPARTO/RUTEO de un total
+    fijo entre alternativas de costo distinto (ej. transporte por dos
+    rutas, donde la capacidad de la ruta barata depende del escenario),
+    NO le pongas costo propio a ``x`` en ``c_1ra_etapa`` y a la vez un
+    costo adicional ``q_s`` a la porción desviada: eso cobra dos veces el
+    costo de esa porción. En ese caso (ruteo) modelá el costo
+    ÍNTEGRAMENTE en variables de recurso (una por alternativa) con una
+    restricción de conservación de flujo (suma de alternativas = x) y
+    ``c_1ra_etapa = 0``. Reservá un costo propio en ``c_1ra_etapa`` para
+    el otro arquetipo: cuando ``x`` es un costo HUNDIDO independiente del
+    escenario y ``y_s`` es una corrección genuinamente ADICIONAL
+    (faltante/sobrante), no una porción de ``x`` que cambió de ruta.
+
+    Parámetros
+    ----------
+    variables_1ra_etapa : nombres de las variables x, en orden.
+    c_1ra_etapa : costos C de 1ra etapa (mismo orden que variables_1ra_etapa).
+    variables_recurso : nombres de las variables de recurso y (mismo vector
+        de nombres se reutiliza en cada escenario; lo que NO se reutiliza
+        son los valores óptimos, que sí son específicos de cada escenario).
+    escenarios : lista de dicts, cada uno con:
+        - 'probabilidad' : float, p_s en (0, 1].
+        - 'nombre' : str, identificador del escenario.
+        - 'q_recurso' : List[float], costos q_s (len == variables_recurso).
+        - 'T_matrix' : List[List[float]], matriz tecnológica T_s
+          (forma m_s x len(variables_1ra_etapa)).
+        - 'W_matrix' : List[List[float]], matriz de recurso W_s
+          (forma m_s x len(variables_recurso)).
+        - 'h_rhs' : List[float], lado derecho h_s (len == m_s).
+        Las probabilidades de todos los escenarios deben sumar 1.
+    A_1ra_etapa, b_1ra_etapa : restricciones deterministas de 1ra etapa
+        A x <= b (opcionales).
+    sense : "min" o "max".
+
+    Retorna
+    -------
+    Éxito: {"exito": True, "costo_esperado_optimo": float,
+            "decisiones_primera_etapa": dict, "detalle_escenarios": list}
+    Error: {"error": str}
+    """
+    if sense not in ("min", "max"):
+        return {"error": "sense debe ser 'min' o 'max'."}
+
+    n1 = len(variables_1ra_etapa)
+    n2 = len(variables_recurso)
+    if n1 == 0:
+        return {"error": "Debe indicar al menos una variable de 1ra etapa."}
+    if len(c_1ra_etapa) != n1:
+        return {
+            "error": f"c_1ra_etapa debe tener {n1} elemento(s) (uno por variable de 1ra etapa)."
+        }
+    if not escenarios:
+        return {"error": "Debe proveer al menos un escenario."}
+
+    # --- Validación de probabilidades ---
+    probs: List[float] = []
+    for i, e in enumerate(escenarios):
+        p = e.get("probabilidad")
+        if p is None or not (0 < p <= 1):
+            return {
+                "error": (
+                    f"El escenario {i + 1} ('{e.get('nombre', '?')}') tiene una "
+                    f"'probabilidad' inválida; debe ser un número en (0, 1]."
+                )
+            }
+        probs.append(float(p))
+    suma_p = sum(probs)
+    if abs(suma_p - 1.0) > 1e-6:
+        return {
+            "error": (
+                "Las probabilidades de los escenarios deben sumar 1 "
+                f"(suma recibida: {round(suma_p, 6)})."
+            )
+        }
+
+    # --- Validación de A_1ra_etapa / b_1ra_etapa ---
+    A1 = b1 = None
+    if A_1ra_etapa is not None or b_1ra_etapa is not None:
+        if A_1ra_etapa is None or b_1ra_etapa is None:
+            return {"error": "Si se indica A_1ra_etapa o b_1ra_etapa, deben indicarse ambos."}
+        b1 = np.array(b_1ra_etapa, dtype=float)
+        A1, err = _check_matrix(A_1ra_etapa, len(b1), n1, "A_1ra_etapa")
+        if err:
+            return {"error": err}
+
+    # --- Validación y extracción de matrices por escenario ---
+    q_list: List[np.ndarray] = []
+    T_list: List[np.ndarray] = []
+    W_list: List[np.ndarray] = []
+    h_list: List[np.ndarray] = []
+    for i, e in enumerate(escenarios):
+        tag = f"escenario {i + 1} ('{e.get('nombre', '?')}')"
+        q_s = np.array(e.get("q_recurso", []), dtype=float)
+        if q_s.shape != (n2,):
+            return {"error": f"En el {tag}: q_recurso debe tener {n2} elemento(s)."}
+        h_s = np.array(e.get("h_rhs", []), dtype=float)
+        m_s = h_s.shape[0]
+        T_s, err = _check_matrix(e.get("T_matrix"), m_s, n1, f"T_matrix del {tag}")
+        if err:
+            return {"error": err}
+        W_s, err = _check_matrix(e.get("W_matrix"), m_s, n2, f"W_matrix del {tag}")
+        if err:
+            return {"error": err}
+        q_list.append(q_s)
+        T_list.append(T_s)
+        W_list.append(W_s)
+        h_list.append(h_s)
+
+    # --- Construcción de la forma extensiva: z = [x, y_1, ..., y_S] ---
+    S = len(escenarios)
+    n_total = n1 + S * n2
+
+    c_full = np.zeros(n_total)
+    c_full[:n1] = c_1ra_etapa
+    for s in range(S):
+        c_full[n1 + s * n2: n1 + (s + 1) * n2] = probs[s] * q_list[s]
+
+    rows: List[np.ndarray] = []
+    b_ub_list: List[float] = []
+    if A1 is not None:
+        for r in range(A1.shape[0]):
+            fila = np.zeros(n_total)
+            fila[:n1] = A1[r]
+            rows.append(fila)
+            b_ub_list.append(b1[r])
+    for s in range(S):
+        T_s, W_s, h_s = T_list[s], W_list[s], h_list[s]
+        for r in range(h_s.shape[0]):
+            fila = np.zeros(n_total)
+            fila[:n1] = T_s[r]
+            fila[n1 + s * n2: n1 + (s + 1) * n2] = W_s[r]
+            rows.append(fila)
+            b_ub_list.append(h_s[r])
+
+    A_ub = np.array(rows) if rows else None
+    b_ub = np.array(b_ub_list) if b_ub_list else None
+
+    sign = -1.0 if sense == "max" else 1.0
+    res = linprog(
+        sign * c_full,
+        A_ub=A_ub,
+        b_ub=b_ub,
+        bounds=[(0, None)] * n_total,
+        method="highs",
+    )
+
+    if not res.success:
+        return {
+            "error": (
+                "El problema estocástico no tiene solución óptima factible "
+                f"(status de scipy.linprog: '{res.message}'). Revise que las "
+                "restricciones de cada escenario sean consistentes entre sí "
+                "y con las de 1ra etapa."
+            )
+        }
+
+    z = res.x
+    x_star = z[:n1]
+    costo_total = sign * res.fun
+    costo_1ra_etapa = float(np.dot(c_1ra_etapa, x_star))
+
+    detalle_escenarios = []
+    for s, e in enumerate(escenarios):
+        y_s = z[n1 + s * n2: n1 + (s + 1) * n2]
+        costo_recurso = float(np.dot(q_list[s], y_s))
+        detalle_escenarios.append(
+            {
+                "nombre": e.get("nombre", f"Escenario {s + 1}"),
+                "probabilidad": probs[s],
+                "decisiones_recurso": _round_dict(
+                    {v: val for v, val in zip(variables_recurso, y_s)}
+                ),
+                "costo_recurso_escenario": round(costo_recurso, 6),
+                "costo_recurso_ponderado": round(probs[s] * costo_recurso, 6),
+            }
+        )
+
+    return {
+        "exito": True,
+        "costo_esperado_optimo": round(float(costo_total), 6),
+        "costo_1ra_etapa": round(costo_1ra_etapa, 6),
+        "costo_recurso_esperado": round(float(costo_total) - costo_1ra_etapa, 6),
+        "decisiones_primera_etapa": _round_dict(
+            {v: val for v, val in zip(variables_1ra_etapa, x_star)}
+        ),
+        "detalle_escenarios": detalle_escenarios,
     }

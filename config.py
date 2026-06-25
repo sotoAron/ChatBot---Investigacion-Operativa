@@ -7,10 +7,10 @@ load_dotenv()
 
 # Intentar cargar desde Streamlit Secrets (ideal para Cloud)
 # Si no existe, intentar desde variables de entorno / .env (ideal para local)
-GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY") 
 
 # Configuración intrínseca
-MODEL_NAME = "gemini-2.5-flash-lite"
+MODEL_NAME = "gemini-2.5-flash"
 
 # Rutas del sistema
 CONTEXT_DIR = "context"

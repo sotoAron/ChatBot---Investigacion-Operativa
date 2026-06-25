@@ -105,6 +105,43 @@ _TOOLS = [
                     required=["coef_deterministicos", "parametro_aleatorio", "media", "desviacion_estandar", "tipo_restriccion", "rhs", "nivel_confianza"],
                 ),
             ),
+            genai.protos.FunctionDeclaration(
+                name="solve_two_stage_stochastic_lp",
+                description=(
+                    "Resuelve Programacion Estocastica Lineal de Dos Etapas con "
+                    "Recurso (escenarios discretos de probabilidad conocida). "
+                    "Usar cuando hay una decision de 1ra etapa tomada ANTES de "
+                    "conocer el escenario, y una decision de recurso (2da etapa) "
+                    "que se ajusta DESPUES de observado el escenario."
+                ),
+                parameters=genai.protos.Schema(
+                    type=genai.protos.Type.OBJECT,
+                    properties={
+                        "variables_1ra_etapa": genai.protos.Schema(type=genai.protos.Type.ARRAY, items=genai.protos.Schema(type=genai.protos.Type.STRING)),
+                        "c_1ra_etapa": genai.protos.Schema(type=genai.protos.Type.ARRAY, items=genai.protos.Schema(type=genai.protos.Type.NUMBER)),
+                        "variables_recurso": genai.protos.Schema(type=genai.protos.Type.ARRAY, items=genai.protos.Schema(type=genai.protos.Type.STRING)),
+                        "A_1ra_etapa": genai.protos.Schema(type=genai.protos.Type.ARRAY, items=genai.protos.Schema(type=genai.protos.Type.ARRAY, items=genai.protos.Schema(type=genai.protos.Type.NUMBER))),
+                        "b_1ra_etapa": genai.protos.Schema(type=genai.protos.Type.ARRAY, items=genai.protos.Schema(type=genai.protos.Type.NUMBER)),
+                        "escenarios": genai.protos.Schema(
+                            type=genai.protos.Type.ARRAY,
+                            items=genai.protos.Schema(
+                                type=genai.protos.Type.OBJECT,
+                                properties={
+                                    "nombre": genai.protos.Schema(type=genai.protos.Type.STRING),
+                                    "probabilidad": genai.protos.Schema(type=genai.protos.Type.NUMBER),
+                                    "q_recurso": genai.protos.Schema(type=genai.protos.Type.ARRAY, items=genai.protos.Schema(type=genai.protos.Type.NUMBER)),
+                                    "T_matrix": genai.protos.Schema(type=genai.protos.Type.ARRAY, items=genai.protos.Schema(type=genai.protos.Type.ARRAY, items=genai.protos.Schema(type=genai.protos.Type.NUMBER))),
+                                    "W_matrix": genai.protos.Schema(type=genai.protos.Type.ARRAY, items=genai.protos.Schema(type=genai.protos.Type.ARRAY, items=genai.protos.Schema(type=genai.protos.Type.NUMBER))),
+                                    "h_rhs": genai.protos.Schema(type=genai.protos.Type.ARRAY, items=genai.protos.Schema(type=genai.protos.Type.NUMBER)),
+                                },
+                                required=["nombre", "probabilidad", "q_recurso", "T_matrix", "W_matrix", "h_rhs"],
+                            ),
+                        ),
+                        "sense": genai.protos.Schema(type=genai.protos.Type.STRING),
+                    },
+                    required=["variables_1ra_etapa", "c_1ra_etapa", "variables_recurso", "escenarios", "sense"],
+                ),
+            ),
         ]
     )
 ]
@@ -115,6 +152,7 @@ _SOLVER_MAP = {
     "solve_separable_programming":    solver.solve_separable_programming,
     "solve_linear_combinations_method": solver.solve_linear_combinations_method,
     "stochastic_to_deterministic":    solver.stochastic_to_deterministic,
+    "solve_two_stage_stochastic_lp":  solver.solve_two_stage_stochastic_lp,
 }
 
 # ---------------------------------------------------------------------------

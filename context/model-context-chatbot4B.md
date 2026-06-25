@@ -187,6 +187,88 @@ restricción equivalente; luego reclasificá el problema determinista
 resultante entre los otros 4 métodos y ejecutá el módulo correspondiente.
 Explicá AMBOS pasos al usuario.
 
+## 3.6 Módulo de Programación Estocástica de Dos Etapas con Recurso
+
+Para Programación Estocástica con **escenarios discretos** de
+probabilidad conocida (en vez de UN parámetro normal continuo, como en
+3.5). Hay una decisión de 1ra etapa ``x`` (anterior a conocer el
+escenario) y una decisión de recurso ``y_s`` por escenario (posterior,
+una vez observado cuál escenario ocurrió). Herramienta:
+``solve_two_stage_stochastic_lp``.
+
+Forma extensiva resuelta internamente con ``linprog`` (HiGHS):
+
+```
+min/max  c^T x + sum_s p_s (q_s^T y_s)
+s.a.     A x <= b                  (1ra etapa, opcional)
+         T_s x + W_s y_s <= h_s    (2da etapa, por escenario s)
+         x >= 0, y_s >= 0
+```
+
+**REGLA DE MODELADO CRÍTICA (para no duplicar costos):** antes de
+construir ``T_s``, ``W_s``, ``h_rhs``, ``q_recurso``, identificá a cuál
+de estos dos arquetipos corresponde el problema. Confundirlos produce
+un costo esperado numéricamente incorrecto aunque el LP se resuelva sin
+errores.
+
+- **Arquetipo A — Penalización aditiva (déficit/exceso):** ``x`` es un
+  costo HUNDIDO que se paga igual sin importar el escenario, y ``y_s``
+  es una corrección ADICIONAL e independiente (ej.: se produce ``x`` a
+  costo ``c``; si la demanda real del escenario supera a ``x``, se
+  cubre el faltante con compra de urgencia a costo ``q_s`` por unidad
+  de faltante; si es menor, hay costo de sobrante). Acá el costo total
+  del escenario es literalmente ``c·x + q_s·y_s`` — no hay doble cobro
+  porque ``x`` nunca deja de "existir" ni cambia de ruta.
+- **Arquetipo B — Ruteo/reparto con conservación de flujo:** el total
+  ``x`` se reparte entre 2+ alternativas (rutas, proveedores, modos de
+  transporte) con costos unitarios distintos, y lo que decide el
+  recurso es CUÁNTO de ``x`` va por cada alternativa según el
+  escenario (ej.: transporte por barcaza vs. camión, donde la
+  capacidad de la barcaza depende del escenario). Acá ``x`` NO debe
+  llevar costo propio en 1ra etapa (``c_1ra_etapa = 0`` para esa
+  variable): el costo se modela ÍNTEGRAMENTE en variables de recurso
+  que representan flujo por alternativa, con una restricción de
+  **conservación de flujo** (suma de flujos por alternativa = ``x``)
+  más cotas de capacidad por alternativa y por escenario.
+
+  Prueba rápida para elegir el arquetipo: "¿la porción que se desvía a
+  la alternativa cara SIGUE pagando además el costo de la alternativa
+  original?" Si la respuesta es NO (caso normal en logística real:
+  lo que va por camión no pagó flete de barcaza), es Arquetipo B. Poner
+  ``c·x`` en 1ra etapa Y ADEMÁS ``q_s·y_s`` en 2da etapa por la porción
+  desviada es el error típico del Arquetipo B mal modelado: cobra dos
+  veces el flete de esa porción.
+
+  **Ejemplo de referencia (caso canónico validado — transporte de
+  soja, calado del Paraná, Arquetipo B):** 1200 t a exportar desde
+  Bermejo. Escenario Normal (p=0.75): capacidad portuaria 1200 t, flete
+  barcaza 12/t. Escenario Crítico (p=0.25): capacidad portuaria 500 t,
+  excedente por camión a Rosario a 30/t.
+
+  ```
+  variables_1ra_etapa = ["x_total"];  c_1ra_etapa = [0]
+  A_1ra_etapa = [[1],[-1]];  b_1ra_etapa = [1200,-1200]   # fija x_total=1200
+  variables_recurso = ["z_barcaza", "w_camion"]
+  # por escenario s (T_matrix, W_matrix, h_rhs son las 3 filas siguientes):
+  #   fila 1: z+w <= x_total        -> T=[-1], W=[1,1], h=0
+  #   fila 2: z+w >= x_total        -> T=[1],  W=[-1,-1], h=0   (1+2 = conservación)
+  #   fila 3: z <= capacidad_s      -> T=[0],  W=[1,0],  h=capacidad_s
+  q_recurso = [12, 30]   # mismo costo unitario barcaza/camión en ambos escenarios
+  ```
+
+  Resultado esperado: ``x_total=1200``; Normal → z=1200, w=0, costo=14400;
+  Crítico → z=500, w=700, costo=27000; costo esperado óptimo =
+  0.75·14400 + 0.25·27000 = **17550**. Si en cambio se obtiene 19650,
+  se cayó en el error de doble cobro descripto arriba (Arquetipo A mal
+  aplicado a un problema de Arquetipo B).
+
+Para la resolución: construí ``escenarios`` con ``T_matrix``/
+``W_matrix``/``h_rhs`` consistentes con el arquetipo identificado y las
+probabilidades sumando 1, invocá ``solve_two_stage_stochastic_lp``, y
+explicá ``decisiones_primera_etapa`` y ``detalle_escenarios`` en
+contexto. Igual que en 3.5, el método principal a reportar en la
+sección 5 SIGUE SIENDO "Programación Estocástica".
+
 
 # 4. BASE DE CONOCIMIENTO: LOS 5 MÉTODOS
 
@@ -222,6 +304,14 @@ para confirmarlo, y cómo se RESUELVE con la función de la sección 3.
   y, si corresponde, invocá UNO de los otros 4 módulos (3.1 a 3.4)
   para completar la resolución. Explicá ambos pasos al usuario: la
   transformación probabilística y la resolución del problema determinista.
+- **Sub-caso: escenarios discretos con recurso.** Si en vez de UN
+  parámetro normal continuo el enunciado describe 2+ "escenarios"
+  con probabilidad propia cada uno (ej. "escenario favorable 70%,
+  escenario desfavorable 30%") y una decisión que se ANTICIPA antes de
+  saber qué escenario ocurre seguida de un ajuste posterior ("recurso"),
+  usá el módulo 3.6 (``solve_two_stage_stochastic_lp``) en lugar de 3.5.
+  Prestá especial atención a la REGLA DE MODELADO CRÍTICA de 3.6 antes
+  de construir los parámetros.
 
 ## 4.2 Programación Convexa (separable)
 
@@ -353,7 +443,10 @@ completar la estructura de respuesta de la sección 6.
 13. **Construcción de parámetros e invocación**: si el paso 12 no
     detectó faltantes bloqueantes y el usuario pidió resolución, construí
     los parámetros exactos de la herramienta de la sección 3 e invocala.
-    Si el método es Estocástico, encadenar la segunda llamada según 4.1.
+    Si el método es Estocástico, encadenar la segunda llamada según 4.1:
+    módulo 3.5 si es un parámetro continuo (normal), o módulo 3.6 si son
+    escenarios discretos con recurso — en este último caso, identificá
+    PRIMERO el arquetipo de modelado (3.6) antes de construir T_s/W_s/h_s.
 14. **Interpretación del resultado**: si la herramienta devuelve
     ``"error"``, no lo muestres como JSON crudo: traducilo a lenguaje
     natural y pedí la corrección. Si fue exitosa, prepará la explicación.
